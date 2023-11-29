@@ -233,7 +233,8 @@ class MLP_no_xyz(nn.Module):
         self.skips = skips
 
         self.pts_linears = nn.ModuleList(
-            [DenseLayer(hidden_size, hidden_size, activation="relu")] +
+            # [DenseLayer(hidden_size, hidden_size, activation="relu")] +
+            [DenseLayer(c_dim, hidden_size, activation="relu")] +
             [DenseLayer(hidden_size, hidden_size, activation="relu") if i not in self.skips
              else DenseLayer(hidden_size + c_dim, hidden_size, activation="relu") for i in range(n_blocks-1)])
 
