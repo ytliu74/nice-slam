@@ -233,7 +233,9 @@ def evaluate(poses_gt, poses_est, plot):
     poses_est = dict([(i, poses_est[i]) for i in range(N)])
 
     results = evaluate_ate(poses_gt, poses_est, plot)
-    print(results)
+
+    from pprint import pprint
+    pprint(results)
 
 
 def convert_poses(c2w_list, N, scale, gt=True):
