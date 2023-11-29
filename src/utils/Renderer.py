@@ -48,6 +48,14 @@ class Renderer(object):
             pi = pi.unsqueeze(0)
             if self.nice:
                 ret = decoders(pi, c_grid=c, stage=stage)
+                # Save pi, c and stage to file
+                import secrets
+                import os
+                if not os.path.exists(f"./saved_inputs/{stage}"):
+                    os.makedirs(f"./saved_inputs/{stage}")
+                if len(os.listdir(f"./saved_inputs/{stage}")) < 1000:
+                    torch.save({"pi": pi, "c": c, "stage": stage}, 
+                        f"./saved_inputs/{stage}/{secrets.token_hex(8)}.pt")
             else:
                 ret = decoders(pi, c_grid=None)
             ret = ret.squeeze(0)
