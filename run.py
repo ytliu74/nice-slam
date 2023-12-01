@@ -24,10 +24,7 @@ def main():
     )
     parser.add_argument("config", type=str, help="Path to config file.")
     parser.add_argument(
-        "--slim", type=bool, default=False, help="use slim version of NICE-SLAM"
-    )
-    parser.add_argument(
-        "--hidden_size", type=int, default=20, help="hidden size of the network"
+        "--hidden_size", type=int, default=32, help="hidden size of the network"
     )
     parser.add_argument(
         "--input_folder",
@@ -45,14 +42,15 @@ def main():
     parser.set_defaults(nice=True)
     args = parser.parse_args()
 
-    if args.slim:
-        print("Use slim version of NICE-SLAM")
-        hidden_size = args.hidden_size
-        cfg = config.load_config(args.config, f"configs/nice_slam_slim_{hidden_size}.yaml")
-    else:
-        cfg = config.load_config(
-            args.config, "configs/nice_slam.yaml" if args.nice else "configs/imap.yaml"
-        )
+    cfg = config.load_config(
+        args.config, "configs/nice_slam.yaml" if args.nice else "configs/imap.yaml"
+    )
+
+    cfg["slim"] = True if args.hidden_size != 32 else False
+
+    if args.hidden_size != 32:
+        cfg["pretrained_decoders"] = f"./saved_slim/hidden_{args.hidden_size}/slim_nice.pth"
+        cfg["model"]["hidden_size"] = args.hidden_size
 
     slam = NICE_SLAM(cfg, args)
 
