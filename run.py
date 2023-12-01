@@ -20,26 +20,44 @@ def main():
     # setup_seed(20)
 
     parser = argparse.ArgumentParser(
-        description='Arguments for running the NICE-SLAM/iMAP*.'
+        description="Arguments for running the NICE-SLAM/iMAP*."
     )
-    parser.add_argument('config', type=str, help='Path to config file.')
-    parser.add_argument('--input_folder', type=str,
-                        help='input folder, this have higher priority, can overwrite the one in config file')
-    parser.add_argument('--output', type=str,
-                        help='output folder, this have higher priority, can overwrite the one in config file')
+    parser.add_argument("config", type=str, help="Path to config file.")
+    parser.add_argument(
+        "--slim", type=bool, default=False, help="use slim version of NICE-SLAM"
+    )
+    parser.add_argument(
+        "--hidden_size", type=int, default=20, help="hidden size of the network"
+    )
+    parser.add_argument(
+        "--input_folder",
+        type=str,
+        help="input folder, this have higher priority, can overwrite the one in config file",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="output folder, this have higher priority, can overwrite the one in config file",
+    )
     nice_parser = parser.add_mutually_exclusive_group(required=False)
-    nice_parser.add_argument('--nice', dest='nice', action='store_true')
-    nice_parser.add_argument('--imap', dest='nice', action='store_false')
+    nice_parser.add_argument("--nice", dest="nice", action="store_true")
+    nice_parser.add_argument("--imap", dest="nice", action="store_false")
     parser.set_defaults(nice=True)
     args = parser.parse_args()
 
-    cfg = config.load_config(
-        args.config, 'configs/nice_slam.yaml' if args.nice else 'configs/imap.yaml')
+    if args.slim:
+        print("Use slim version of NICE-SLAM")
+        hidden_size = args.hidden_size
+        cfg = config.load_config(args.config, f"configs/nice_slam_slim_{hidden_size}.yaml")
+    else:
+        cfg = config.load_config(
+            args.config, "configs/nice_slam.yaml" if args.nice else "configs/imap.yaml"
+        )
 
     slam = NICE_SLAM(cfg, args)
 
     slam.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
