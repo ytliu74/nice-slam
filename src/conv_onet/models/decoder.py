@@ -341,3 +341,82 @@ class NICE(nn.Module):
             middle_occ = middle_occ.squeeze(0)
             raw[..., -1] = fine_occ+middle_occ
             return raw
+
+from torch.quantization.quantize_fx import prepare_qat_fx
+
+class NICE_quant(nn.Module):
+    """    
+    Neural Implicit Scalable Encoding.
+
+    Args:
+        dim (int): input dimension.
+        c_dim (int): feature dimension.
+        coarse_grid_len (float): voxel length in coarse grid.
+        middle_grid_len (float): voxel length in middle grid.
+        fine_grid_len (float): voxel length in fine grid.
+        color_grid_len (float): voxel length in color grid.
+        hidden_size (int): hidden size of decoder network
+        coarse (bool): whether or not to use coarse level.
+        pos_embedding_method (str): positional embedding method.
+    """
+
+    def __init__(self, dim=3, c_dim=32,
+                 coarse_grid_len=2.0,  middle_grid_len=0.16, fine_grid_len=0.16,
+                 color_grid_len=0.16, hidden_size=32, coarse=False, pos_embedding_method='fourier', qconfig_dict=None):
+        super().__init__()
+
+        def quantize_model(model):
+            model.train()
+            return prepare_qat_fx(model, qconfig_dict)
+
+        if coarse:
+            self.coarse_decoder = MLP_no_xyz(
+                name='coarse', dim=dim, c_dim=c_dim, color=False, hidden_size=hidden_size, grid_len=coarse_grid_len)
+            self.coarse_decoder = quantize_model(self.coarse_decoder)
+
+        self.middle_decoder = MLP(name='middle', dim=dim, c_dim=c_dim, color=False,
+                                  skips=[2], n_blocks=5, hidden_size=hidden_size,
+                                  grid_len=middle_grid_len, pos_embedding_method=pos_embedding_method)
+        self.middle_decoder = quantize_model(self.middle_decoder)
+
+        self.fine_decoder = MLP(name='fine', dim=dim, c_dim=c_dim*2, color=False,
+                                skips=[2], n_blocks=5, hidden_size=hidden_size,
+                                grid_len=fine_grid_len, concat_feature=True, pos_embedding_method=pos_embedding_method)
+        self.fine_decoder = quantize_model(self.fine_decoder)
+
+        self.color_decoder = MLP(name='color', dim=dim, c_dim=c_dim, color=True,
+                                 skips=[2], n_blocks=5, hidden_size=hidden_size,
+                                 grid_len=color_grid_len, pos_embedding_method=pos_embedding_method)
+        self.color_decoder = quantize_model(self.color_decoder)
+
+    def forward(self, p, c_grid, stage='middle', **kwargs):
+        """
+            Output occupancy/color in different stage.
+        """
+        device = f'cuda:{p.get_device()}'
+        if stage == 'coarse':
+            occ = self.coarse_decoder(p, c_grid)
+            occ = occ.squeeze(0)
+            raw = torch.zeros(occ.shape[0], 4).to(device).float()
+            raw[..., -1] = occ
+            return raw
+        elif stage == 'middle':
+            middle_occ = self.middle_decoder(p, c_grid)
+            middle_occ = middle_occ.squeeze(0)
+            raw = torch.zeros(middle_occ.shape[0], 4).to(device).float()
+            raw[..., -1] = middle_occ
+            return raw
+        elif stage == 'fine':
+            fine_occ = self.fine_decoder(p, c_grid)
+            raw = torch.zeros(fine_occ.shape[0], 4).to(device).float()
+            middle_occ = self.middle_decoder(p, c_grid)
+            middle_occ = middle_occ.squeeze(0)
+            raw[..., -1] = fine_occ+middle_occ
+            return raw
+        elif stage == 'color':
+            fine_occ = self.fine_decoder(p, c_grid)
+            raw = self.color_decoder(p, c_grid)
+            middle_occ = self.middle_decoder(p, c_grid)
+            middle_occ = middle_occ.squeeze(0)
+            raw[..., -1] = fine_occ+middle_occ
+            return raw

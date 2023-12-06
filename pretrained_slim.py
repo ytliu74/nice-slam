@@ -5,9 +5,6 @@ import src.conv_onet.models.decoder as decoder
 from torchsummary import summary
 import src.config as config
 
-HIDDEN_SIZE = 16
-print(f"hidden size: {HIDDEN_SIZE}")
-
 def load_pretrain(nice: decoder.NICE, cfg: dict):
     ckpt = torch.load(
         cfg["pretrained_decoders"]["coarse"], map_location=cfg["mapping"]["device"]
@@ -51,62 +48,65 @@ def load_bound(nice: decoder.NICE, cfg: dict):
     nice.color_decoder.bound = bound
     nice.coarse_decoder.bound = bound * cfg["model"]["coarse_bound_enlarge"]
 
+if __name__ == "__main__":
+    HIDDEN_SIZE = 16
+    print(f"hidden size: {HIDDEN_SIZE}")    
 
-nice = decoder.NICE(coarse=True).to("cuda:0")
-slim_nice = decoder.NICE(hidden_size=HIDDEN_SIZE, coarse=True).to("cuda:0")
+    nice = decoder.NICE(coarse=True).to("cuda:0")
+    slim_nice = decoder.NICE(hidden_size=HIDDEN_SIZE, coarse=True).to("cuda:0")
 
-cfg = config.load_config("./configs/Replica/room0.yaml", "./configs/nice_slam.yaml")
+    cfg = config.load_config("./configs/Replica/room0.yaml", "./configs/nice_slam.yaml")
 
-load_pretrain(nice, cfg)
-load_bound(nice, cfg)
+    load_pretrain(nice, cfg)
+    load_bound(nice, cfg)
 
-load_bound(slim_nice, cfg)
+    load_bound(slim_nice, cfg)
 
 
-import os
-from torch.optim.lr_scheduler import StepLR
+    import os
+    from torch.optim.lr_scheduler import StepLR
 
-EPOCH = 40
-LR = 1e-4
+    EPOCH = 40
+    LR = 1e-4
 
-loss_fn = nn.MSELoss()
-optimizer = torch.optim.Adam(slim_nice.parameters(), lr=LR)
-scheduler = StepLR(optimizer, step_size=250, gamma=0.7)
+    loss_fn = nn.MSELoss()
+    optimizer = torch.optim.Adam(slim_nice.parameters(), lr=LR)
+    scheduler = StepLR(optimizer, step_size=250, gamma=0.7)
 
-stages = ["coarse", "middle", "fine", "color"]
+    stages = ["coarse", "middle", "fine", "color"]
 
-loss_record = {"coarse": [], "middle": [], "fine": [], "color": []}
+    loss_record = {"coarse": [], "middle": [], "fine": [], "color": []}
 
-for epoch in range(EPOCH):
-    for stage in stages:
-        optimizer.zero_grad()
-        for i, pt in enumerate(os.listdir(f"./saved_inputs/{stage}")):
-            data = torch.load(f"./saved_inputs/{stage}/{pt}")
-            pi = data["pi"].to(cfg["mapping"]["device"])
-            c = data["c"]
-            with torch.no_grad():
-                pretrained_result = nice(pi, c_grid=c, stage=stage)
+    for epoch in range(EPOCH):
+        for stage in stages:
+            optimizer.zero_grad()
+            for i, pt in enumerate(os.listdir(f"./saved_inputs/{stage}")):
+                data = torch.load(f"./saved_inputs/{stage}/{pt}")
+                pi = data["pi"].to(cfg["mapping"]["device"])
+                c = data["c"]
+                with torch.no_grad():
+                    pretrained_result = nice(pi, c_grid=c, stage=stage)
 
-            slim_result = slim_nice(pi, c_grid=c, stage=stage)
-            loss = loss_fn(pretrained_result, slim_result) / 20
+                slim_result = slim_nice(pi, c_grid=c, stage=stage)
+                loss = loss_fn(pretrained_result, slim_result) / 20
 
-            loss.backward()
+                loss.backward()
 
-            if i % 20 == 0:
-                optimizer.step()
-                optimizer.zero_grad()
-                print(f"stage: {stage}, loss: {loss.item()}")
-                loss_record[stage].append(loss.item())
+                if i % 20 == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    print(f"stage: {stage}, loss: {loss.item()}")
+                    loss_record[stage].append(loss.item())
 
-# Save the record
-import pickle
+    # Save the record
+    import pickle
 
-# Check if the folder exists
-if not os.path.exists(f"./saved_slim/hidden_{HIDDEN_SIZE}"):
-    os.makedirs(f"./saved_slim/hidden_{HIDDEN_SIZE}")
+    # Check if the folder exists
+    if not os.path.exists(f"./saved_slim/hidden_{HIDDEN_SIZE}"):
+        os.makedirs(f"./saved_slim/hidden_{HIDDEN_SIZE}")
 
-with open(f"./saved_slim/hidden_{HIDDEN_SIZE}/loss_record.pkl", "wb") as f:
-    pickle.dump(loss_record, f)
+    with open(f"./saved_slim/hidden_{HIDDEN_SIZE}/loss_record.pkl", "wb") as f:
+        pickle.dump(loss_record, f)
 
-# Save the model
-torch.save(slim_nice.state_dict(), f"./saved_slim/hidden_{HIDDEN_SIZE}/slim_nice.pth")
+    # Save the model
+    torch.save(slim_nice.state_dict(), f"./saved_slim/hidden_{HIDDEN_SIZE}/slim_nice.pth")
